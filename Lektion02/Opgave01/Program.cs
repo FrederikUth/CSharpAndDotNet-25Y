@@ -12,6 +12,26 @@ class Program
       PropertyNameCaseInsensitive = true
     };
     var characters = JsonSerializer.Deserialize<List<Character>>(GetPotterJson(), jsonOptions);
+    
+    //Opgave 1.1 Udskriv fulde navn og hogwarts hus i consollen med brug i LINQ
+    Console.WriteLine("OPGAVE1.1");
+    var characterInfo = characters
+      .Select(c => $"{c.FullName} - {c.HogwartsHouse}");
+
+    foreach (var info in characterInfo)
+    {
+      Console.WriteLine(info);
+    }
+    
+    //Opgave 1.2 udskriv alle karakterene der tilhører Gryffindor
+    Console.WriteLine("-------------------------------------------------------------------");
+    Console.WriteLine("OPGAVE1.2");
+    var gryffindorCharacters = characters
+      .Where(c => c.HogwartsHouse == "Gryffindor");
+    foreach (var info in gryffindorCharacters)
+    {
+      Console.WriteLine(info.FullName);
+    }
   }
 
   public static string GetPotterJson()
