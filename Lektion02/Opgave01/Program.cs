@@ -32,6 +32,17 @@ class Program
     {
       Console.WriteLine(info.FullName);
     }
+    
+    //Opgave 1.3 Udskriv alle med børn og deres børn
+    Console.WriteLine("Opgave1.3");
+    var charactersWithChildren = characters
+      .Where(c => c.Children.Count > 0)
+      .Select(c => $"{c.FullName}: {string.Join(", ", c.Children)}");
+
+    foreach (var line in charactersWithChildren)
+    {
+      Console.WriteLine(line);
+    }
   }
 
   public static string GetPotterJson()
