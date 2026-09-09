@@ -54,6 +54,9 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Lektion03Opgave03", "Lektion03\Lektion03Opgave03\Lektion03Opgave03.csproj", "{E2EDA83B-A6E0-4E40-8F63-432F7B95BA64}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Lektion04", "Lektion04", "{60E52213-3377-4595-861A-CA1134222532}"
+	ProjectSection(SolutionItems) = preProject
+		Lektion04\lektion04Opgaver.md = Lektion04\lektion04Opgaver.md
+	EndProjectSection
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Slides", "Slides", "{9E79AEF0-02F8-4C80-951C-E9D600F82E0F}"
 	ProjectSection(SolutionItems) = preProject
