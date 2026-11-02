@@ -1,0 +1,419 @@
+@page "/"
+@using Client.Services
+@inject ISubTrackService SubTrack
+
+<PageTitle>SubTrack - abonnementer</PageTitle>
+
+<div class="dashboard">
+    <header class="hero">
+        <div>
+            <p class="eyebrow">DIT ØKONOMISKE OVERBLIK</p>
+            <h1>Abonnementer, <span>under kontrol.</span></h1>
+            <p class="hero-copy">Saml dine faste udgifter, og få styr på næste betaling.</p>
+        </div>
+        <button class="primary-button" @onclick="StartCreate">＋ Nyt abonnement</button>
+    </header>
+
+    @if (_loading)
+    {
+        <div class="notice">Henter dit overblik…</div>
+    }
+    else if (!string.IsNullOrWhiteSpace(_error))
+    {
+        <div class="notice error" role="alert">
+            <strong>Kunne ikke hente data.</strong> @_error
+            <button class="text-button" @onclick="LoadAsync">Prøv igen</button>
+        </div>
+    }
+    else
+    {
+        <section class="summary-grid" aria-label="Forbrug">
+            <article class="summary-card total">
+                <span class="summary-label">Månedligt forbrug</span>
+                <strong>@Money(_dashboard!.MonthlyTotal)</strong>
+                <span class="summary-foot">normaliseret pr. måned</span>
+            </article>
+            <article class="summary-card">
+                <span class="summary-label">Forventet årsforbrug</span>
+                <strong>@Money(_dashboard!.AnnualTotal)</strong>
+                <span class="summary-foot">baseret på aktive abonnementer</span>
+            </article>
+            <article class="summary-card">
+                <span class="summary-label">Aktive abonnementer</span>
+                <strong>@_subscriptions.Count(item => item.Status == SubscriptionStatus.Active)</strong>
+                <span class="summary-foot">af @_subscriptions.Count i alt</span>
+            </article>
+        </section>
+
+        <div class="content-grid">
+            <section class="panel subscriptions-panel">
+                <div class="panel-heading">
+                    <div>
+                        <p class="eyebrow">DIN OVERSIGT</p>
+                        <h2>Alle abonnementer</h2>
+                    </div>
+                    <span class="count-pill">@_subscriptions.Count</span>
+                </div>
+
+                @if (_subscriptions.Count == 0)
+                {
+                    <div class="empty-state">Du har ikke oprettet abonnementer endnu.</div>
+                }
+                else
+                {
+                    <div class="subscription-list">
+                        @foreach (var subscription in _subscriptions)
+                        {
+                            <article class="subscription-row" @key="subscription.Id">
+                                <span class="category-mark" style="@($"background:{subscription.CategoryColorCode}")"></span>
+                                <div class="subscription-name">
+                                    <strong>@subscription.Name</strong>
+                                    <span>@subscription.CategoryName · @CycleName(subscription.BillingCycle)</span>
+                                </div>
+                                <div class="subscription-date">
+                                    <span>Næste betaling</span>
+                                    <strong>@subscription.NextBillingDate.ToString("dd. MMM yyyy")</strong>
+                                </div>
+                                <div class="subscription-price">
+                                    <strong>@Money(subscription.Price, subscription.Currency)</strong>
+                                    <span>@StatusName(subscription.Status)</span>
+                                </div>
+                                <div class="row-actions">
+                                    <button class="icon-button" title="Rediger @subscription.Name" @onclick="() => StartEdit(subscription)">Rediger</button>
+                                    <button class="icon-button danger-text" title="Slet @subscription.Name" @onclick="() => DeleteAsync(subscription)">Slet</button>
+                                </div>
+                            </article>
+                        }
+                    </div>
+                }
+            </section>
+
+            <aside class="side-column">
+                <section class="panel">
+                    <div class="panel-heading">
+                        <div>
+                            <p class="eyebrow">FORDELING</p>
+                            <h2>Pr. kategori</h2>
+                        </div>
+                    </div>
+                    @if (_dashboard!.SpendingByCategory.Count == 0)
+                    {
+                        <p class="muted">Ingen aktive udgifter endnu.</p>
+                    }
+                    else
+                    {
+                        @foreach (var category in _dashboard.SpendingByCategory)
+                        {
+                            var share = _dashboard.MonthlyTotal == 0 ? 0 : (double)(category.MonthlyAmount / _dashboard.MonthlyTotal * 100);
+                            <div class="category-spend" @key="category.CategoryName">
+                                <div class="spend-label">
+                                    <span><i style="@($"background:{category.ColorCode}")"></i>@category.CategoryName</span>
+                                    <strong>@Money(category.MonthlyAmount)</strong>
+                                </div>
+                                <div class="bar-track"><span style="@($"width:{share:F0}%;background:{category.ColorCode}")"></span></div>
+                            </div>
+                        }
+                    }
+                </section>
+
+                <section class="panel renewals">
+                    <div class="panel-heading">
+                        <div>
+                            <p class="eyebrow">DE NÆSTE 7 DAGE</p>
+                            <h2>Kommer snart</h2>
+                        </div>
+                        <span class="count-pill warm">@_dashboard.UpcomingRenewals.Count</span>
+                    </div>
+                    @if (_dashboard.UpcomingRenewals.Count == 0)
+                    {
+                        <p class="muted">Ingen betalinger lige foreløbig.</p>
+                    }
+                    else
+                    {
+                        @foreach (var renewal in _dashboard.UpcomingRenewals)
+                        {
+                            <div class="renewal-row" @key="renewal.Id">
+                                <div><strong>@renewal.Name</strong><span>@renewal.NextBillingDate.ToString("dd. MMM")</span></div>
+                                <strong>@Money(renewal.Price, renewal.Currency)</strong>
+                            </div>
+                        }
+                    }
+                </section>
+
+                <section class="panel management-panel">
+                    <div class="panel-heading">
+                        <div>
+                            <p class="eyebrow">TILPASNING</p>
+                            <h2>Mine kategorier</h2>
+                        </div>
+                    </div>
+                    <div class="mini-form">
+                        <EditForm Model="_categoryDraft" OnValidSubmit="CreateCategoryAsync">
+                            <DataAnnotationsValidator />
+                            <div class="management-inputs">
+                                <InputText @bind-Value="_categoryDraft.Name" placeholder="Ny kategori" aria-label="Navn på ny kategori" />
+                                <InputText type="color" @bind-Value="_categoryDraft.ColorCode" aria-label="Kategorifarve" />
+                                <button class="secondary-button" type="submit">Tilføj</button>
+                            </div>
+                            <ValidationMessage For="@(() => _categoryDraft.Name)" />
+                        </EditForm>
+                        <EditForm Model="_paymentMethodDraft" OnValidSubmit="CreatePaymentMethodAsync">
+                            <DataAnnotationsValidator />
+                            <div class="management-inputs">
+                                <InputText @bind-Value="_paymentMethodDraft.Name" placeholder="Ny betalingsmetode" aria-label="Navn på betalingsmetode" />
+                                <button class="secondary-button" type="submit">Tilføj</button>
+                            </div>
+                            <ValidationMessage For="@(() => _paymentMethodDraft.Name)" />
+                        </EditForm>
+                        <p class="muted small">@_categories.Count kategorier · @_paymentMethods.Count betalingsmetoder</p>
+                    </div>
+                </section>
+            </aside>
+        </div>
+    }
+</div>
+
+@if (_showEditor)
+{
+    <div class="modal-backdrop" role="presentation" @onclick="CloseEditor">
+        <section class="editor-card" role="dialog" aria-modal="true" aria-labelledby="editor-title" @onclick:stopPropagation="true">
+            <div class="panel-heading">
+                <div>
+                    <p class="eyebrow">ABONNEMENT</p>
+                    <h2 id="editor-title">@(_draft.Id is null ? "Nyt abonnement" : "Rediger abonnement")</h2>
+                </div>
+                <button class="icon-button" aria-label="Luk" @onclick="CloseEditor">Luk</button>
+            </div>
+            @if (_categories.Count == 0 || _paymentMethods.Count == 0)
+            {
+                <p class="notice error">Tilføj mindst én kategori og én betalingsmetode først.</p>
+            }
+            else
+            {
+                <EditForm Model="_draft" OnValidSubmit="SaveAsync">
+                    <DataAnnotationsValidator />
+                    <ValidationSummary />
+                    <div class="form-grid">
+                        <label>Navn<InputText @bind-Value="_draft.Name" placeholder="Fx Netflix" /></label>
+                        <label>Pris<InputNumber @bind-Value="_draft.Price" min="0.01" step="0.01" /></label>
+                        <label>Valuta<InputText @bind-Value="_draft.Currency" maxlength="3" /></label>
+                        <label>Betalingsinterval
+                            <InputSelect @bind-Value="_draft.BillingCycle">
+                                <option value="@BillingCycle.Monthly">Månedlig</option>
+                                <option value="@BillingCycle.Quarterly">Kvartalsvis</option>
+                                <option value="@BillingCycle.Yearly">Årlig</option>
+                            </InputSelect>
+                        </label>
+                        <label>Startdato<InputDate @bind-Value="_draft.StartDate" /></label>
+                        <label>Næste fornyelse<InputDate @bind-Value="_draft.NextBillingDate" /></label>
+                        <label>Kategori
+                            <InputSelect @bind-Value="_draft.CategoryId">
+                                <option value="0">Vælg kategori</option>
+                                @foreach (var category in _categories)
+                                {
+                                    <option value="@category.Id">@category.Name</option>
+                                }
+                            </InputSelect>
+                        </label>
+                        <label>Betalingsmetode
+                            <InputSelect @bind-Value="_draft.PaymentMethodId">
+                                <option value="0">Vælg betalingsmetode</option>
+                                @foreach (var method in _paymentMethods)
+                                {
+                                    <option value="@method.Id">@method.Name</option>
+                                }
+                            </InputSelect>
+                        </label>
+                        <label>Status
+                            <InputSelect @bind-Value="_draft.Status">
+                                <option value="@SubscriptionStatus.Active">Aktiv</option>
+                                <option value="@SubscriptionStatus.Paused">Sat på pause</option>
+                                <option value="@SubscriptionStatus.Cancelled">Opsagt</option>
+                            </InputSelect>
+                        </label>
+                    </div>
+                    <div class="editor-actions">
+                        <button class="secondary-button" type="button" @onclick="CloseEditor">Annuller</button>
+                        <button class="primary-button" type="submit" disabled="@_saving">@(_saving ? "Gemmer…" : "Gem abonnement")</button>
+                    </div>
+                </EditForm>
+            }
+        </section>
+    </div>
+}
+
+@if (!string.IsNullOrWhiteSpace(_message))
+{
+    <div class="toast-message @(_messageIsError ? "error" : "success")" role="status">@_message</div>
+}
+
+@code {
+    private IReadOnlyList<SubscriptionItem> _subscriptions = [];
+    private IReadOnlyList<CategoryItem> _categories = [];
+    private IReadOnlyList<PaymentMethodItem> _paymentMethods = [];
+    private DashboardSummary? _dashboard;
+    private SubscriptionDraft _draft = new();
+    private CategoryDraft _categoryDraft = new();
+    private PaymentMethodDraft _paymentMethodDraft = new();
+    private bool _loading = true;
+    private bool _saving;
+    private bool _showEditor;
+    private string? _error;
+    private string? _message;
+    private bool _messageIsError;
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _error = null;
+        try
+        {
+            var subscriptionsTask = SubTrack.GetSubscriptionsAsync();
+            var dashboardTask = SubTrack.GetDashboardAsync();
+            var categoriesTask = SubTrack.GetCategoriesAsync();
+            var paymentMethodsTask = SubTrack.GetPaymentMethodsAsync();
+            await Task.WhenAll(subscriptionsTask, dashboardTask, categoriesTask, paymentMethodsTask);
+            _subscriptions = await subscriptionsTask;
+            _dashboard = await dashboardTask;
+            _categories = await categoriesTask;
+            _paymentMethods = await paymentMethodsTask;
+        }
+        catch (Exception exception)
+        {
+            _error = exception.Message;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private void StartCreate()
+    {
+        _draft = new SubscriptionDraft
+        {
+            CategoryId = _categories.FirstOrDefault()?.Id ?? 0,
+            PaymentMethodId = _paymentMethods.FirstOrDefault()?.Id ?? 0
+        };
+        _showEditor = true;
+    }
+
+    private void StartEdit(SubscriptionItem item)
+    {
+        _draft = new SubscriptionDraft
+        {
+            Id = item.Id,
+            Name = item.Name,
+            Price = item.Price,
+            Currency = item.Currency,
+            BillingCycle = item.BillingCycle,
+            StartDate = item.StartDate,
+            NextBillingDate = item.NextBillingDate,
+            Status = item.Status,
+            CategoryId = item.CategoryId,
+            PaymentMethodId = item.PaymentMethodId
+        };
+        _showEditor = true;
+    }
+
+    private async Task SaveAsync()
+    {
+        _saving = true;
+        try
+        {
+            if (_draft.Id is null)
+            {
+                await SubTrack.CreateSubscriptionAsync(_draft);
+            }
+            else
+            {
+                await SubTrack.UpdateSubscriptionAsync(_draft);
+            }
+
+            CloseEditor();
+            ShowMessage("Abonnementet er gemt.");
+            await LoadAsync();
+        }
+        catch (Exception exception)
+        {
+            ShowMessage(exception.Message, true);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private async Task DeleteAsync(SubscriptionItem item)
+    {
+        try
+        {
+            await SubTrack.DeleteSubscriptionAsync(item.Id);
+            ShowMessage($"{item.Name} er slettet.");
+            await LoadAsync();
+        }
+        catch (Exception exception)
+        {
+            ShowMessage(exception.Message, true);
+        }
+    }
+
+    private async Task CreateCategoryAsync()
+    {
+        try
+        {
+            await SubTrack.CreateCategoryAsync(_categoryDraft);
+            _categoryDraft = new CategoryDraft();
+            ShowMessage("Kategorien er tilføjet.");
+            await LoadAsync();
+        }
+        catch (Exception exception)
+        {
+            ShowMessage(exception.Message, true);
+        }
+    }
+
+    private async Task CreatePaymentMethodAsync()
+    {
+        try
+        {
+            await SubTrack.CreatePaymentMethodAsync(_paymentMethodDraft);
+            _paymentMethodDraft = new PaymentMethodDraft();
+            ShowMessage("Betalingsmetoden er tilføjet.");
+            await LoadAsync();
+        }
+        catch (Exception exception)
+        {
+            ShowMessage(exception.Message, true);
+        }
+    }
+
+    private void CloseEditor() => _showEditor = false;
+
+    private void ShowMessage(string message, bool isError = false)
+    {
+        _message = message;
+        _messageIsError = isError;
+    }
+
+    private static string Money(decimal amount, string currency = "DKK") =>
+        $"{amount:N2} {currency}";
+
+    private static string CycleName(BillingCycle cycle) => cycle switch
+    {
+        BillingCycle.Monthly => "Månedlig",
+        BillingCycle.Quarterly => "Kvartalsvis",
+        BillingCycle.Yearly => "Årlig",
+        _ => cycle.ToString()
+    };
+
+    private static string StatusName(SubscriptionStatus status) => status switch
+    {
+        SubscriptionStatus.Active => "Aktiv",
+        SubscriptionStatus.Paused => "På pause",
+        SubscriptionStatus.Cancelled => "Opsagt",
+        _ => status.ToString()
+    };
+}
